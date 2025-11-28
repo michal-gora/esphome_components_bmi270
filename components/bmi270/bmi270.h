@@ -3,7 +3,7 @@
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/i2c/i2c.h"
-#include <memory>
+#include "esphome/core/hal.h"
 
 // BMI270 API type definitions and constants
 #define BMI2_OK 0
@@ -126,7 +126,6 @@ class BMI270Component : public PollingComponent, public i2c::I2CDevice {
   bool sensors_active_{false};
 
   // BMI270 device structure and configuration
-  std::unique_ptr<i2c::I2CDevice> i2c_dev_{nullptr};
   bmi2_dev sensor_{};
   bmi2_sens_config accel_cfg_{};
   bmi2_sens_config gyro_cfg_{};

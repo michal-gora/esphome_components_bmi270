@@ -109,10 +109,8 @@ int8_t bmi2_get_sensor_data(bmi2_sensor_data *sensor_data, uint8_t n_sens, bmi2_
 
 void BMI270Component::setup() {
   ESP_LOGCONFIG(TAG, "Setting up BMI270...");
-  this->i2c_dev_ = make_unique<esphome::i2c::I2CDevice>(this->parent_, this->address_);
-  this->i2c_dev_->set_timeout(50);
 
-  this->sensor_.intf_ptr = this->i2c_dev_.get();
+  this->sensor_.intf_ptr = this;
   this->sensor_.intf = BMI2_I2C_INTF;
   this->sensor_.read = read_bytes;
   this->sensor_.write = write_bytes;
@@ -211,17 +209,23 @@ float BMI270Component::get_setup_priority() const {
 }
 
 int8_t BMI270Component::read_bytes(uint8_t reg_addr, uint8_t *data, uint32_t len, void *intf_ptr) {
-  auto *dev = reinterpret_cast<esphome::i2c::I2CDevice *>(intf_ptr);
-  return dev->read(reg_addr, data, len) ? BMI2_OK : BMI2_E_COM_FAIL;
+  auto *component = reinterpret_cast<BMI270Component *>(intf_ptr);
+  if (component->read_register(reg_addr, data, len) != i2c::ERROR_OK) {
+    return BMI2_E_COM_FAIL;
+  }
+  return BMI2_OK;
 }
 
 int8_t BMI270Component::write_bytes(uint8_t reg_addr, const uint8_t *data, uint32_t len, void *intf_ptr) {
-  auto *dev = reinterpret_cast<esphome::i2c::I2CDevice *>(intf_ptr);
-  return dev->write(reg_addr, data, len) ? BMI2_OK : BMI2_E_COM_FAIL;
+  auto *component = reinterpret_cast<BMI270Component *>(intf_ptr);
+  if (component->write_register(reg_addr, data, len) != i2c::ERROR_OK) {
+    return BMI2_E_COM_FAIL;
+  }
+  return BMI2_OK;
 }
 
 void BMI270Component::delay_usec(uint32_t period, void *) {
-  delayMicroseconds(period);
+  delay_microseconds_safe(period);
 }
 
 }  // namespace bmi270
