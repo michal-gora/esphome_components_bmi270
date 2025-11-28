@@ -82,10 +82,10 @@ i2c:
   frequency: 200kHz
 
 # ============================================
-# WETTER-SENSOREN VON HOME ASSISTANT
+# WEATHER SENSORS FROM HOME ASSISTANT
 # ============================================
 sensor:
-  # OpenWeatherMap Sensoren
+  # OpenWeatherMap sensors
   - platform: homeassistant
     id: weather_temperature
     entity_id: sensor.openweathermap_temperature
@@ -129,7 +129,7 @@ sensor:
     id: weather_cloud_coverage
     entity_id: sensor.openweathermap_cloud_coverage
 
-  # System-Sensoren
+  # System sensors
   - platform: internal_temperature
     name: "Chip Temperature"
     id: chip_temp
@@ -175,17 +175,17 @@ binary_sensor:
     device_class: battery_charging
 
 # ============================================
-# ZEIT-SYNCHRONISATION
+# TIME SYNCHRONIZATION
 # ============================================
 time:
-  - platform: pcf8563  # RTC auf dem M5Paper
+  - platform: pcf8563  # RTC on M5Paper
     id: rtc_time
     address: 0x51
     update_interval: never
 
   - platform: homeassistant
     id: ha_time
-    timezone: Europe/Berlin  # ANPASSEN: Deine Zeitzone
+    timezone: Europe/Berlin  # ADJUST: Your timezone
     update_interval: 1h
     on_time_sync:
       then:
@@ -193,16 +193,16 @@ time:
             id: rtc_time
 
 # ============================================
-# DISPLAY-UPDATE INTERVALLE
+# DISPLAY UPDATE INTERVALS
 # ============================================
 interval:
-  # Vollständiges Display-Refresh alle 6 Stunden (gegen Ghosting)
+  # Full display refresh every 6 hours (anti-ghosting)
   - interval: 6h
     then:
       - logger.log: "Full display refresh"
       - component.update: weather_display
 
-  # Status-LED Blinken (System läuft)
+  # Status LED blink (system running)
   - interval: 30s
     then:
       - light.turn_on:
@@ -212,7 +212,7 @@ interval:
       - light.turn_off: status_led
 
 # ============================================
-# HARDWARE-KOMPONENTEN
+# HARDWARE COMPONENTS
 # ============================================
 light:
   - platform: monochromatic
@@ -249,31 +249,31 @@ touchscreen:
     - component.update: weather_display
 
 # ============================================
-# SCHRIFTARTEN
+# FONTS
 # ============================================
 font:
-  # Große Schrift für Haupttemperatur
+  # Large font for main temperature
   - file: "gfonts://Roboto@700"  # Bold
     id: font_large
     size: 120
 
-  # Mittlere Schrift für Details
+  # Medium font for details
   - file: "gfonts://Roboto"
     id: font_medium
     size: 48
 
-  # Kleine Schrift für Labels
+  # Small font for labels
   - file: "gfonts://Roboto"
     id: font_small
     size: 32
 
-  # Sehr kleine Schrift für Zusatzinfos
+  # Tiny font for additional info
   - file: "gfonts://Roboto"
     id: font_tiny
     size: 24
 
 # ============================================
-# WETTER-DISPLAY
+# WEATHER DISPLAY
 # ============================================
 display:
   - platform: ed047tc1
@@ -293,22 +293,22 @@ display:
     d5_pin: GPIO11
     d6_pin: GPIO8
     d7_pin: GPIO10
-    update_interval: never
+    update_interval: 1min  # Update every minute for current time
     rotation: 90
     lambda: |-
-      // Bildschirm-Dimensionen (nach 90° Rotation)
+      // Screen dimensions (after 90° rotation)
       #define SCREEN_W 540
       #define SCREEN_H 960
 
-      // Farben (für E-Ink: 0x00=schwarz, 0xFF=weiß)
+      // Colors (for E-Ink: 0x00=black, 0xFF=white)
       #define BLACK 0x00
       #define WHITE 0xFF
       #define GRAY 0x88
 
       // ========================================
-      // WETTER-ICON AUSWAHL
+      // WEATHER ICON SELECTION
       // ========================================
-      // TODO: Icons als ESPHome Image-Komponenten definieren
+      // TODO: Define icons as ESPHome Image components
       // const uint8_t* weather_icon = nullptr;
       // uint32_t icon_width = 128;
       // uint32_t icon_height = 128;
@@ -357,7 +357,7 @@ display:
       // }
 
       // ========================================
-      // KOPFZEILE: DATUM & ZEIT
+      // HEADER: DATE & TIME
       // ========================================
       it.strftime(SCREEN_W/2, 30, id(font_small), TextAlign::TOP_CENTER,
                   "%A, %d. %B %Y", id(rtc_time).now());
@@ -365,55 +365,55 @@ display:
       it.strftime(SCREEN_W/2, 85, id(font_large), TextAlign::TOP_CENTER,
                   "%H:%M", id(rtc_time).now());
 
-      // Trennlinie
+      // Separator line
       it.line(40, 220, SCREEN_W-40, 220);
 
       // ========================================
-      // HAUPTBEREICH: TEMPERATUR & ICON
+      // MAIN SECTION: TEMPERATURE & ICON
       // ========================================
 
-      // Wetter-Icon (links) - TODO: Icons müssen als ESPHome Image-Komponenten definiert werden
-      // Die Rohdaten können nicht direkt mit it.image() verwendet werden
+      // Weather icon (left) - TODO: Icons must be defined as ESPHome Image components
+      // Raw data cannot be used directly with it.image()
       // if (weather_icon != nullptr) {
       //   it.image(60, 260, weather_icon, icon_width, icon_height);
       // }
 
-      // Haupttemperatur (rechts vom Icon)
+      // Main temperature (right of icon)
       if (id(weather_temperature).has_state()) {
         it.printf(340, 290, id(font_large), TextAlign::CENTER,
                   "%.1f°", id(weather_temperature).state);
         it.printf(340, 400, id(font_medium), TextAlign::CENTER, "C");
       }
 
-      // Wetterzustand als Text
+      // Weather condition as text
       it.printf(SCREEN_W/2, 470, id(font_medium), TextAlign::TOP_CENTER,
                 "%s", condition.c_str());
 
       // ========================================
-      // DETAILS-BEREICH (3 Spalten)
+      // DETAILS SECTION (3 columns)
       // ========================================
       int details_y = 570;
       int col_spacing = SCREEN_W / 3;
 
-      // Spalte 1: Luftfeuchtigkeit
+      // Column 1: Humidity
       it.printf(col_spacing/2, details_y, id(font_small), TextAlign::TOP_CENTER,
-                "Feuchtigkeit");
+                "Humidity");
       if (id(weather_humidity).has_state()) {
         it.printf(col_spacing/2, details_y+40, id(font_medium), TextAlign::TOP_CENTER,
                   "%.0f%%", id(weather_humidity).state);
       }
 
-      // Spalte 2: Gefühlte Temperatur
+      // Column 2: Feels like temperature
       it.printf(SCREEN_W/2, details_y, id(font_small), TextAlign::TOP_CENTER,
-                "Gefuehlt");
+                "Feels like");
       if (id(weather_feels_like).has_state()) {
         it.printf(SCREEN_W/2, details_y+40, id(font_medium), TextAlign::TOP_CENTER,
                   "%.1f°C", id(weather_feels_like).state);
       }
 
-      // Spalte 3: Luftdruck
+      // Column 3: Pressure
       it.printf(SCREEN_W-col_spacing/2, details_y, id(font_small), TextAlign::TOP_CENTER,
-                "Luftdruck");
+                "Pressure");
       if (id(weather_pressure).has_state()) {
         it.printf(SCREEN_W-col_spacing/2, details_y+40, id(font_medium), TextAlign::TOP_CENTER,
                   "%.0f", id(weather_pressure).state);
@@ -422,7 +422,7 @@ display:
       }
 
       // ========================================
-      // ZUSATZ-INFO: Wind & UV-Index
+      // ADDITIONAL INFO: Wind & UV Index
       // ========================================
       int extra_y = 730;
 
@@ -438,43 +438,43 @@ display:
                   "UV: %.1f", id(weather_uv_index).state);
       }
 
-      // Bewölkung
+      // Cloudiness
       if (id(weather_cloud_coverage).has_state()) {
         it.printf(SCREEN_W/2, extra_y+40, id(font_small), TextAlign::TOP_CENTER,
-                  "Bewoelkung: %.0f%%", id(weather_cloud_coverage).state);
+                  "Cloudiness: %.0f%%", id(weather_cloud_coverage).state);
       }
 
       // ========================================
-      // FUSSZEILE: BATTERIE & STATUS
+      // FOOTER: BATTERY & STATUS
       // ========================================
       int footer_y = SCREEN_H - 60;
 
-      // Batteriespannung
+      // Battery voltage
       if (id(battery_voltage).has_state()) {
         float battery_v = id(battery_voltage).state;
         bool charging = id(charge_status).state;
 
         it.printf(40, footer_y, id(font_tiny), TextAlign::BOTTOM_LEFT,
                   "%s %.2fV",
-                  charging ? "Laden" : "Batterie",
+                  charging ? "Charging" : "Battery",
                   battery_v);
 
-        // Batterie-Prozent (grobe Schätzung für LiPo)
+        // Battery percentage (rough estimate for LiPo)
         float percent = (battery_v - 3.3) / (4.2 - 3.3) * 100.0;
         percent = max(0.0f, min(100.0f, percent));
         it.printf(40, footer_y+30, id(font_tiny), TextAlign::BOTTOM_LEFT,
                   "%.0f%%", percent);
       }
 
-      // WiFi-Status
+      // WiFi status
       it.printf(SCREEN_W/2, footer_y, id(font_tiny), TextAlign::BOTTOM_CENTER,
-                "WiFi: Verbunden");
+                "WiFi: Connected");
 
-      // Letzte Aktualisierung
+      // Last update
       it.strftime(SCREEN_W-40, footer_y, id(font_tiny), TextAlign::BOTTOM_RIGHT,
-                  "Update: %H:%M", id(rtc_time).now());
+                  "Updated: %H:%M", id(rtc_time).now());
 
-      // Chip-Temperatur
+      // Chip temperature
       if (id(chip_temp).has_state()) {
         it.printf(SCREEN_W-40, footer_y+30, id(font_tiny), TextAlign::BOTTOM_RIGHT,
                   "CPU: %.1f°C", id(chip_temp).state);
