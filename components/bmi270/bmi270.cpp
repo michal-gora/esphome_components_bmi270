@@ -122,6 +122,7 @@ void BMI270Component::setup() {
   rslt = bmi270_init(&this->sensor_);
   if (rslt != BMI2_OK) {
     ESP_LOGE(TAG, "BMI270 initialization failed: %d", rslt);
+    this->failure_reason_ = "Initialization failed with error code " + std::to_string(rslt);
     this->mark_failed();
     return;
   }
@@ -133,6 +134,7 @@ void BMI270Component::setup() {
   rslt = bmi270_sensor_enable(sens_list, 2, &this->sensor_);
   if (rslt != BMI2_OK) {
     ESP_LOGE(TAG, "Failed to enable accelerometer and gyroscope: %d", rslt);
+    this->failure_reason_ = "Sensor enable failed with error code " + std::to_string(rslt);
     this->mark_failed();
     return;
   }
@@ -146,6 +148,7 @@ void BMI270Component::setup() {
   rslt = bmi270_set_sensor_config(&this->accel_cfg_, 1, &this->sensor_);
   if (rslt != BMI2_OK) {
     ESP_LOGE(TAG, "Failed to configure accelerometer: %d", rslt);
+    this->failure_reason_ = "Accelerometer config failed with error code " + std::to_string(rslt);
     this->mark_failed();
     return;
   }
@@ -160,6 +163,7 @@ void BMI270Component::setup() {
   rslt = bmi270_set_sensor_config(&this->gyro_cfg_, 1, &this->sensor_);
   if (rslt != BMI2_OK) {
     ESP_LOGE(TAG, "Failed to configure gyroscope: %d", rslt);
+    this->failure_reason_ = "Gyroscope config failed with error code " + std::to_string(rslt);
     this->mark_failed();
     return;
   }
@@ -200,7 +204,7 @@ void BMI270Component::dump_config() {
   ESP_LOGCONFIG(TAG, "BMI270:");
   LOG_I2C_DEVICE(this);
   if (this->is_failed()) {
-    ESP_LOGE(TAG, "BMI270 communication failed");
+    ESP_LOGE(TAG, "  Initialization failed: %s", this->failure_reason_.c_str());
   }
 }
 
