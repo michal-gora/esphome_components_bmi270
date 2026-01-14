@@ -170,6 +170,16 @@ void BMI270Component::setup() {
   }
 
   this->is_initialized_ = true;
+
+  // Verify sensors are actually active by checking status register
+  uint8_t status = 0;
+  rslt = this->read_register(0x03, &status, 1);  // Read STATUS_ADDR (0x03)
+  if (rslt == i2c::ERROR_OK && (status & 0xC0)) {  // Check bits 6 and 7 (DRDY_ACC and DRDY_GYR)
+    this->sensors_active_ = true;
+    ESP_LOGI(TAG, "BMI270 setup complete - sensors active (status=0x%02X)", status);
+  } else {
+    ESP_LOGW(TAG, "Sensors may not be active - status register: 0x%02X (i2c_result=%d)", status, rslt);
+  }
 }
 
 void BMI270Component::update() {
@@ -185,6 +195,11 @@ void BMI270Component::update() {
     ESP_LOGW(TAG, "Failed to read sensor data: %d", rslt);
     return;
   }
+
+  // Log raw sensor values for debugging
+  ESP_LOGD(TAG, "Raw Accel: X=%d Y=%d Z=%d | Gyro: X=%d Y=%d Z=%d",
+           sensor_data[0].sens_data.acc.x, sensor_data[0].sens_data.acc.y, sensor_data[0].sens_data.acc.z,
+           sensor_data[1].sens_data.gyr.x, sensor_data[1].sens_data.gyr.y, sensor_data[1].sens_data.gyr.z);
 
   if (this->accel_x_sensor_ != nullptr)
     this->accel_x_sensor_->publish_state(sensor_data[0].sens_data.acc.x / 1000.0f);
