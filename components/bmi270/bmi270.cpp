@@ -292,6 +292,17 @@ void BMI270Component::update() {
     this->gyro_y_sensor_->publish_state(sensor_data[1].sens_data.gyr.y * GYRO_SCALE);
   if (this->gyro_z_sensor_ != nullptr)
     this->gyro_z_sensor_->publish_state(sensor_data[1].sens_data.gyr.z * GYRO_SCALE);
+
+  // Temperature: Registers 0x22 (LSB) and 0x23 (MSB)
+  // Resolution: 1/512 °C/LSB, with 0x0000 = 23°C
+  if (this->temperature_sensor_ != nullptr) {
+    uint8_t temp_data[2];
+    if (this->read_register(0x22, temp_data, 2) == i2c::ERROR_OK) {
+      int16_t temp_raw = (int16_t)((temp_data[1] << 8) | temp_data[0]);
+      float temperature = (temp_raw / 512.0f) + 23.0f;
+      this->temperature_sensor_->publish_state(temperature);
+    }
+  }
 }
 
 void BMI270Component::dump_config() {
