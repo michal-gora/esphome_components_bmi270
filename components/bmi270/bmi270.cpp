@@ -115,6 +115,7 @@ void BMI270Component::setup() {
   this->sensor_.read = read_bytes;
   this->sensor_.write = write_bytes;
   this->sensor_.delay_us = delay_usec;
+  this->sensor_.read_write_len = 32;  // Max burst read/write length
 
   int8_t rslt;
 
@@ -138,7 +139,16 @@ void BMI270Component::setup() {
     this->mark_failed();
     return;
   }
-  ESP_LOGI(TAG, "Sensors enabled successfully");
+  
+  // Verify PWR_CTRL was written correctly
+  uint8_t pwr_ctrl_readback = 0;
+  uint8_t pwr_conf_readback = 0;
+  this->read_register(BMI2_PWR_CTRL_ADDR, &pwr_ctrl_readback, 1);
+  this->read_register(BMI2_PWR_CONF_ADDR, &pwr_conf_readback, 1);
+  
+  char buf[64];
+  snprintf(buf, sizeof(buf), "PWR_CTRL=0x%02X PWR_CONF=0x%02X; ", pwr_ctrl_readback, pwr_conf_readback);
+  this->failure_reason_ += buf;
 
   // Configure accelerometer
   this->accel_cfg_.type = BMI2_ACCEL;
@@ -153,6 +163,15 @@ void BMI270Component::setup() {
     this->mark_failed();
     return;
   }
+  
+  // Read back accelerometer config
+  uint8_t acc_conf_readback = 0;
+  uint8_t acc_range_readback = 0;
+  this->read_register(BMI2_ACC_CONF_ADDR, &acc_conf_readback, 1);
+  this->read_register(BMI2_ACC_RANGE_ADDR, &acc_range_readback, 1);
+  
+  snprintf(buf, sizeof(buf), "ACC_CONF=0x%02X ACC_RANGE=0x%02X; ", acc_conf_readback, acc_range_readback);
+  this->failure_reason_ += buf;
 
   // Configure gyroscope
   this->gyro_cfg_.type = BMI2_GYRO;
@@ -168,17 +187,28 @@ void BMI270Component::setup() {
     this->mark_failed();
     return;
   }
+  
+  // Read back gyroscope config
+  uint8_t gyr_conf_readback = 0;
+  uint8_t gyr_range_readback = 0;
+  this->read_register(BMI2_GYR_CONF_ADDR, &gyr_conf_readback, 1);
+  this->read_register(BMI2_GYR_RANGE_ADDR, &gyr_range_readback, 1);
+  
+  snprintf(buf, sizeof(buf), "GYR_CONF=0x%02X GYR_RANGE=0x%02X; ", gyr_conf_readback, gyr_range_readback);
+  this->failure_reason_ += buf;
 
   this->is_initialized_ = true;
 
   // Verify sensors are actually active by checking status register
   uint8_t status = 0;
-  rslt = this->read_register(0x03, &status, 1);  // Read STATUS_ADDR (0x03)
-  if (rslt == i2c::ERROR_OK && (status & 0xC0)) {  // Check bits 6 and 7 (DRDY_ACC and DRDY_GYR)
+  i2c::ErrorCode err = this->read_register(0x03, &status, 1);  // Read STATUS_ADDR (0x03)
+  
+  snprintf(buf, sizeof(buf), "STATUS=0x%02X (i2c_err=%d) ACC_DRDY=%d GYR_DRDY=%d", 
+           status, err, (status >> 7) & 1, (status >> 6) & 1);
+  this->failure_reason_ += buf;
+  
+  if (err == i2c::ERROR_OK && (status & 0xC0)) {
     this->sensors_active_ = true;
-    ESP_LOGI(TAG, "BMI270 setup complete - sensors active (status=0x%02X)", status);
-  } else {
-    ESP_LOGW(TAG, "Sensors may not be active - status register: 0x%02X (i2c_result=%d)", status, rslt);
   }
 }
 
@@ -186,6 +216,10 @@ void BMI270Component::update() {
   if (!this->is_initialized_)
     return;
 
+  // Check status register to see if data is ready
+  uint8_t status = 0;
+  i2c::ErrorCode err = this->read_register(0x03, &status, 1);
+  
   struct bmi2_sensor_data sensor_data[2] = {};
   sensor_data[0].type = BMI2_ACCEL;
   sensor_data[1].type = BMI2_GYRO;
@@ -196,8 +230,9 @@ void BMI270Component::update() {
     return;
   }
 
-  // Log raw sensor values for debugging
-  ESP_LOGD(TAG, "Raw Accel: X=%d Y=%d Z=%d | Gyro: X=%d Y=%d Z=%d",
+  // Log raw sensor values and status for debugging
+  ESP_LOGD(TAG, "Status=0x%02X (i2c_err=%d) | Accel: X=%d Y=%d Z=%d | Gyro: X=%d Y=%d Z=%d",
+           status, err,
            sensor_data[0].sens_data.acc.x, sensor_data[0].sens_data.acc.y, sensor_data[0].sens_data.acc.z,
            sensor_data[1].sens_data.gyr.x, sensor_data[1].sens_data.gyr.y, sensor_data[1].sens_data.gyr.z);
 
