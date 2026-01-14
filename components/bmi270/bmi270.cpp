@@ -92,8 +92,8 @@ int8_t bmi270_init(bmi2_dev *dev) {
 }
 
 int8_t bmi270_sensor_enable(const uint8_t *sens_list, uint8_t n_sens, bmi2_dev *dev) {
-  // Enable accelerometer (0x04) and gyroscope (0x02)
-  uint8_t pwr_ctrl = 0x06; // ACC (0x04) + GYR (0x02) = 0x06
+  // Enable accelerometer (0x04), gyroscope (0x02), and temperature (0x08)
+  uint8_t pwr_ctrl = 0x0E; // TEMP (0x08) + ACC (0x04) + GYR (0x02) = 0x0E
   return dev->write(BMI2_PWR_CTRL_ADDR, &pwr_ctrl, 1, dev->intf_ptr);
 }
 
