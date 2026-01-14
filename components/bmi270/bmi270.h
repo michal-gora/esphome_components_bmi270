@@ -8,6 +8,7 @@
 // BMI270 API type definitions and constants
 #define BMI2_OK 0
 #define BMI2_E_COM_FAIL 1
+#define BMI2_E_CONFIG_LOAD 2
 
 #define BMI2_I2C_INTF 0
 #define BMI2_ACCEL 0

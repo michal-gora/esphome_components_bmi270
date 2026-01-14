@@ -12,6 +12,8 @@ static const char *const TAG = "bmi270";
 #define BMI2_PWR_CONF_ADDR 0x7C
 #define BMI2_PWR_CTRL_ADDR 0x7D
 #define BMI2_INIT_CTRL_ADDR 0x59
+#define BMI2_INIT_ADDR_0 0x5B
+#define BMI2_INIT_ADDR_1 0x5C
 #define BMI2_INIT_DATA_ADDR 0x5E
 #define BMI2_ACC_CONF_ADDR 0x40
 #define BMI2_ACC_RANGE_ADDR 0x41
@@ -20,6 +22,7 @@ static const char *const TAG = "bmi270";
 #define BMI2_ACC_DATA_ADDR 0x0C
 #define BMI2_GYR_DATA_ADDR 0x12
 #define BMI2_INTERNAL_STATUS_ADDR 0x21
+#define BMI2_STATUS_ADDR 0x03
 
 #define BMI2_CHIP_ID 0x24
 #define BMI2_INIT_DATA_SIZE sizeof(bmi270_config_file)
@@ -34,30 +37,56 @@ int8_t bmi270_init(bmi2_dev *dev) {
 
   dev->chip_id = chip_id;
 
-  // Disable advanced power save
+  // Disable advanced power save mode (required for config upload)
   uint8_t pwr_conf = 0x00;
   rslt = dev->write(BMI2_PWR_CONF_ADDR, &pwr_conf, 1, dev->intf_ptr);
   if (rslt != BMI2_OK) return rslt;
   dev->delay_us(450, dev->intf_ptr);
 
-  // Prepare for config file upload
+  // Disable config loading (INIT_CTRL = 0)
   uint8_t init_ctrl = 0x00;
   rslt = dev->write(BMI2_INIT_CTRL_ADDR, &init_ctrl, 1, dev->intf_ptr);
   if (rslt != BMI2_OK) return rslt;
 
-  // Upload config file
-  for (uint16_t i = 0; i < BMI2_INIT_DATA_SIZE; i += 32) {
-    uint16_t len = (BMI2_INIT_DATA_SIZE - i) > 32 ? 32 : (BMI2_INIT_DATA_SIZE - i);
-    rslt = dev->write(BMI2_INIT_DATA_ADDR, &bmi270_config_file[i], len, dev->intf_ptr);
+  // Upload config file in chunks with proper addressing
+  // The BMI270 requires setting the word address before each chunk
+  const uint16_t chunk_size = 32;  // Bytes per chunk (must be even)
+  for (uint16_t index = 0; index < BMI2_INIT_DATA_SIZE; index += chunk_size) {
+    // Calculate word address (index / 2)
+    uint16_t word_addr = index / 2;
+    uint8_t addr_array[2];
+    addr_array[0] = (uint8_t)(word_addr & 0x0F);         // Lower 4 bits
+    addr_array[1] = (uint8_t)((word_addr >> 4) & 0xFF);  // Upper 8 bits
+    
+    // Write the address to INIT_ADDR registers
+    rslt = dev->write(BMI2_INIT_ADDR_0, addr_array, 2, dev->intf_ptr);
     if (rslt != BMI2_OK) return rslt;
-    dev->delay_us(500, dev->intf_ptr);
+    
+    // Calculate actual chunk length
+    uint16_t len = (BMI2_INIT_DATA_SIZE - index) > chunk_size ? chunk_size : (BMI2_INIT_DATA_SIZE - index);
+    
+    // Write config data chunk
+    rslt = dev->write(BMI2_INIT_DATA_ADDR, &bmi270_config_file[index], len, dev->intf_ptr);
+    if (rslt != BMI2_OK) return rslt;
   }
 
-  // Complete config upload
+  // Enable config loading (INIT_CTRL = 1)
   init_ctrl = 0x01;
   rslt = dev->write(BMI2_INIT_CTRL_ADDR, &init_ctrl, 1, dev->intf_ptr);
   if (rslt != BMI2_OK) return rslt;
-  dev->delay_us(20000, dev->intf_ptr);
+  
+  // Wait for initialization to complete (150ms as per datasheet)
+  dev->delay_us(150000, dev->intf_ptr);
+
+  // Check internal status to verify config load was successful
+  uint8_t internal_status = 0;
+  rslt = dev->read(BMI2_INTERNAL_STATUS_ADDR, &internal_status, 1, dev->intf_ptr);
+  if (rslt != BMI2_OK) return rslt;
+  
+  // Bit 0 should be 1 (INIT_OK) for successful initialization
+  if ((internal_status & 0x01) != 0x01) {
+    return BMI2_E_CONFIG_LOAD;
+  }
 
   return BMI2_OK;
 }
@@ -115,15 +144,23 @@ void BMI270Component::setup() {
   this->sensor_.read = read_bytes;
   this->sensor_.write = write_bytes;
   this->sensor_.delay_us = delay_usec;
-  this->sensor_.read_write_len = 32;  // Max burst read/write length
 
   int8_t rslt;
 
   // Initialize the BMI270
   rslt = bmi270_init(&this->sensor_);
   if (rslt != BMI2_OK) {
-    ESP_LOGE(TAG, "BMI270 initialization failed: %d", rslt);
-    this->failure_reason_ += "Initialization failed; ";
+    if (rslt == BMI2_E_CONFIG_LOAD) {
+      ESP_LOGE(TAG, "BMI270 config load failed");
+      uint8_t internal_status = 0;
+      this->read_register(BMI2_INTERNAL_STATUS_ADDR, &internal_status, 1);
+      char buf[64];
+      snprintf(buf, sizeof(buf), "Config load failed, INTERNAL_STATUS=0x%02X; ", internal_status);
+      this->failure_reason_ += buf;
+    } else {
+      ESP_LOGE(TAG, "BMI270 initialization failed: %d", rslt);
+      this->failure_reason_ += "Initialization failed; ";
+    }
     this->mark_failed();
     return;
   }
