@@ -273,19 +273,25 @@ void BMI270Component::update() {
            sensor_data[0].sens_data.acc.x, sensor_data[0].sens_data.acc.y, sensor_data[0].sens_data.acc.z,
            sensor_data[1].sens_data.gyr.x, sensor_data[1].sens_data.gyr.y, sensor_data[1].sens_data.gyr.z);
 
+  // Accelerometer: At ±2g range, sensitivity is 16384 LSB/g
+  // Convert to SI units: m/s² (multiply g by 9.80665)
+  constexpr float ACCEL_SCALE = 9.80665f / 16384.0f;  // LSB to m/s²
   if (this->accel_x_sensor_ != nullptr)
-    this->accel_x_sensor_->publish_state(sensor_data[0].sens_data.acc.x / 1000.0f);
+    this->accel_x_sensor_->publish_state(sensor_data[0].sens_data.acc.x * ACCEL_SCALE);
   if (this->accel_y_sensor_ != nullptr)
-    this->accel_y_sensor_->publish_state(sensor_data[0].sens_data.acc.y / 1000.0f);
+    this->accel_y_sensor_->publish_state(sensor_data[0].sens_data.acc.y * ACCEL_SCALE);
   if (this->accel_z_sensor_ != nullptr)
-    this->accel_z_sensor_->publish_state(sensor_data[0].sens_data.acc.z / 1000.0f);
+    this->accel_z_sensor_->publish_state(sensor_data[0].sens_data.acc.z * ACCEL_SCALE);
 
+  // Gyroscope: At ±2000°/s range, sensitivity is 16.4 LSB/°/s
+  // Output in °/s (degrees per second)
+  constexpr float GYRO_SCALE = 1.0f / 16.4f;  // LSB to °/s
   if (this->gyro_x_sensor_ != nullptr)
-    this->gyro_x_sensor_->publish_state(sensor_data[1].sens_data.gyr.x / 16.4f);
+    this->gyro_x_sensor_->publish_state(sensor_data[1].sens_data.gyr.x * GYRO_SCALE);
   if (this->gyro_y_sensor_ != nullptr)
-    this->gyro_y_sensor_->publish_state(sensor_data[1].sens_data.gyr.y / 16.4f);
+    this->gyro_y_sensor_->publish_state(sensor_data[1].sens_data.gyr.y * GYRO_SCALE);
   if (this->gyro_z_sensor_ != nullptr)
-    this->gyro_z_sensor_->publish_state(sensor_data[1].sens_data.gyr.z / 16.4f);
+    this->gyro_z_sensor_->publish_state(sensor_data[1].sens_data.gyr.z * GYRO_SCALE);
 }
 
 void BMI270Component::dump_config() {
