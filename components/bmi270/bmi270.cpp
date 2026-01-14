@@ -23,6 +23,10 @@ static const char *const TAG = "bmi270";
 #define BMI2_GYR_DATA_ADDR 0x12
 #define BMI2_INTERNAL_STATUS_ADDR 0x21
 #define BMI2_STATUS_ADDR 0x03
+#define BMI2_NV_CONF_ADDR 0x70
+#define BMI2_GYR_OFF_COMP_3_ADDR 0x74
+#define BMI2_GYR_OFF_COMP_6_ADDR 0x77
+#define BMI2_OFFSET_ADDR 0x77
 
 #define BMI2_CHIP_ID 0x24
 #define BMI2_INIT_DATA_SIZE sizeof(bmi270_config_file)
@@ -234,6 +238,41 @@ void BMI270Component::setup() {
   snprintf(buf, sizeof(buf), "GYR_CONF=0x%02X GYR_RANGE=0x%02X; ", gyr_conf_readback, gyr_range_readback);
   this->failure_reason_ += buf;
 
+  // Enable gyroscope offset compensation
+  // NV_CONF register (0x70): bit 6 = gyr_off_en
+  uint8_t nv_conf = 0;
+  this->read_register(BMI2_NV_CONF_ADDR, &nv_conf, 1);
+  nv_conf |= 0x40;  // Set bit 6 to enable gyro offset compensation
+  this->write_register(BMI2_NV_CONF_ADDR, &nv_conf, 1);
+  ESP_LOGI(TAG, "Enabled gyroscope offset compensation (NV_CONF=0x%02X)", nv_conf);
+
+  // Perform software gyro bias calibration
+  // Wait for sensor to stabilize, then take average readings
+  ESP_LOGI(TAG, "Calibrating gyroscope bias (keep device still)...");
+  delay(10);  // Wait for sensor to stabilize
+  
+  int32_t gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+  const int num_samples = 32;
+  
+  for (int i = 0; i < num_samples; i++) {
+    uint8_t gyro_data[6];
+    this->read_register(BMI2_GYR_DATA_ADDR, gyro_data, 6);
+    int16_t gx = (int16_t)((gyro_data[1] << 8) | gyro_data[0]);
+    int16_t gy = (int16_t)((gyro_data[3] << 8) | gyro_data[2]);
+    int16_t gz = (int16_t)((gyro_data[5] << 8) | gyro_data[4]);
+    gyro_bias_x += gx;
+    gyro_bias_y += gy;
+    gyro_bias_z += gz;
+    delay(10);  // 100Hz sample rate
+  }
+  
+  this->gyro_bias_x_ = gyro_bias_x / num_samples;
+  this->gyro_bias_y_ = gyro_bias_y / num_samples;
+  this->gyro_bias_z_ = gyro_bias_z / num_samples;
+  
+  ESP_LOGI(TAG, "Gyro bias calibration complete: X=%d Y=%d Z=%d LSB", 
+           this->gyro_bias_x_, this->gyro_bias_y_, this->gyro_bias_z_);
+
   this->is_initialized_ = true;
 
   // Verify sensors are actually active by checking status register
@@ -284,14 +323,14 @@ void BMI270Component::update() {
     this->accel_z_sensor_->publish_state(sensor_data[0].sens_data.acc.z * ACCEL_SCALE);
 
   // Gyroscope: At ±2000°/s range, sensitivity is 16.4 LSB/°/s
-  // Output in °/s (degrees per second)
+  // Output in °/s (degrees per second), with bias correction
   constexpr float GYRO_SCALE = 1.0f / 16.4f;  // LSB to °/s
   if (this->gyro_x_sensor_ != nullptr)
-    this->gyro_x_sensor_->publish_state(sensor_data[1].sens_data.gyr.x * GYRO_SCALE);
+    this->gyro_x_sensor_->publish_state((sensor_data[1].sens_data.gyr.x - this->gyro_bias_x_) * GYRO_SCALE);
   if (this->gyro_y_sensor_ != nullptr)
-    this->gyro_y_sensor_->publish_state(sensor_data[1].sens_data.gyr.y * GYRO_SCALE);
+    this->gyro_y_sensor_->publish_state((sensor_data[1].sens_data.gyr.y - this->gyro_bias_y_) * GYRO_SCALE);
   if (this->gyro_z_sensor_ != nullptr)
-    this->gyro_z_sensor_->publish_state(sensor_data[1].sens_data.gyr.z * GYRO_SCALE);
+    this->gyro_z_sensor_->publish_state((sensor_data[1].sens_data.gyr.z - this->gyro_bias_z_) * GYRO_SCALE);
 
   // Temperature: Registers 0x22 (LSB) and 0x23 (MSB)
   // Resolution: 1/512 °C/LSB, with 0x0000 = 23°C

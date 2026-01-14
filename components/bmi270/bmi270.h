@@ -126,6 +126,11 @@ class BMI270Component : public PollingComponent, public i2c::I2CDevice {
   PowerSaveMode power_save_mode_{POWER_SAVE_MODE_NORMAL};
   bool sensors_active_{false};
 
+  // Gyroscope bias calibration values (in LSB)
+  int16_t gyro_bias_x_{0};
+  int16_t gyro_bias_y_{0};
+  int16_t gyro_bias_z_{0};
+
   // BMI270 device structure and configuration
   bmi2_dev sensor_{};
   bmi2_sens_config accel_cfg_{};
