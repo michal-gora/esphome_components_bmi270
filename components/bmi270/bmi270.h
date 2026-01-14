@@ -131,7 +131,7 @@ class BMI270Component : public PollingComponent, public i2c::I2CDevice {
   bmi2_sens_config gyro_cfg_{};
   bool is_initialized_{false};
 
-  std::string failure_reason_;
+  std::string failure_reason_{""};
 };
 
 }  // namespace bmi270
